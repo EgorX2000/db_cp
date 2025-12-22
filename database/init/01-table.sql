@@ -6,6 +6,16 @@ create table users (
     role varchar(25) not null check (role in ('Клиент', 'Продавец', 'Админ'))
 );
 
+create table users_personal_data (
+    user_id int primary key,
+    country varchar(100),
+    city varchar(100),
+    address text,
+    postal_code varchar(20),
+    birth_date date,
+    foreign key (user_id) references users(id) on update cascade on delete cascade
+);
+
 create table equipment_categories (
     id serial primary key,
     name varchar(100) not null,

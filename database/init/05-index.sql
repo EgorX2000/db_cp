@@ -54,8 +54,8 @@ limit 20
 offset 10;
 
 
-drop index if exists idx_rentals_active_end_date;
-drop index if exists idx_rentals_overdue_end_date;
-drop index if exists idx_rentals_start_date;
-drop index if exists idx_rentals_overdue_status;
-drop index if exists idx_rental_items_rental_id;
+-- drop index if exists idx_rentals_active_end_date;
+-- drop index if exists idx_rentals_overdue_end_date;
+-- drop index if exists idx_rentals_start_date;
+-- drop index if exists idx_rentals_overdue_status;
+-- drop index if exists idx_rental_items_rental_id;
