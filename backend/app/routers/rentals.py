@@ -4,7 +4,7 @@ from datetime import date
 from typing import List, Optional
 from .. import crud, schemas, database
 
-router = APIRouter(prefix="/rentals", tags=["Аренды"])
+router = APIRouter(prefix="/rentals", tags=["CRUD ORM"])
 
 
 @router.post("/", response_model=schemas.RentalResponse)

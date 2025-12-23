@@ -2,8 +2,7 @@ from fastapi import FastAPI
 from .routers import rentals, reports, batch
 
 app = FastAPI(
-    title="Система управления арендой оборудования",
-    description="Курсовая работа по Базам данных",
+    title="Система управления арендой инструментов и оборудования",
     version="1.0"
 )
 

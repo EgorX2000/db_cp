@@ -11,6 +11,14 @@ from dotenv import load_dotenv
 from pathlib import Path
 
 
+NUM_USERS_CLIENTS = 800
+NUM_USERS_SELLERS = 150
+NUM_USERS_ADMINS = 50
+NUM_EQUIPMENT = 1200
+NUM_RENTALS = 6000
+NUM_PAYMENTS = 5000
+
+
 LOG_DIR = Path("./app/logs")
 LOG_DIR.mkdir(exist_ok=True)
 logging.basicConfig(
@@ -75,16 +83,16 @@ class DatabaseFiller:
             ('Садовые измельчители', 'Измельчители веток и садового мусора', 3),
         ]
 
-        for name, desc, parent_id in categories:
-            self.cur.execute("""
-                INSERT INTO equipment_categories (name, description, parent_id)
-                VALUES (%s, %s, %s) RETURNING id
-            """, (name, desc, parent_id))
-            cat_id = self.cur.fetchone()[0]
-            self.category_ids.append(cat_id)
+        self.cur.executemany("""
+            INSERT INTO equipment_categories (name, description, parent_id)
+            VALUES (%s, %s, %s)
+        """, categories)
+
+        self.cur.execute("SELECT id FROM equipment_categories ORDER BY id")
+        self.category_ids = [row[0] for row in self.cur.fetchall()]
 
         self.conn.commit()
-        logger.info(f"Добавлено {len(categories)} категорий оборудования")
+        logger.info(f"Добавлено категорий оборудования: {len(categories)}")
 
     def fill_equipment_models(self):
         models = [
@@ -120,83 +128,109 @@ class DatabaseFiller:
              'Плиткорез напольный, длина реза 600мм, алмазное колесо'),
         ]
 
-        for name, brand, price, deposit, desc in models:
-            self.cur.execute("""
-                INSERT INTO equipment_models (name, brand, rental_price_per_day, deposit_amount, description)
-                VALUES (%s, %s, %s, %s, %s) RETURNING id
-            """, (name, brand, price, deposit, desc))
-            model_id = self.cur.fetchone()[0]
-            self.model_ids.append(model_id)
+        self.cur.executemany("""
+            INSERT INTO equipment_models (name, brand, rental_price_per_day, deposit_amount, description)
+            VALUES (%s, %s, %s, %s, %s)
+        """, models)
+
+        self.cur.execute("SELECT id FROM equipment_models ORDER BY id")
+        self.model_ids = [row[0] for row in self.cur.fetchall()]
 
         self.conn.commit()
-        logger.info(f"Добавлено {len(models)} моделей оборудования")
+        logger.info(f"Добавлено моделей оборудования: {len(models)}")
 
     def fill_users(self):
-        roles = [
-            ('Клиент', 800, self.client_ids),
-            ('Продавец', 150, self.seller_ids),
-            ('Админ', 50, self.admin_ids)
-        ]
+        users_data = []
 
-        for role, count, id_list in roles:
-            for i in range(1, count + 1):
-                name = f"{role} {i}" if role in [
-                    'Продавец', 'Админ'] else self.fake.name()
-                email_domain = 'mail.com' if role == 'Клиент' else 'company.com'
-                email = f"{role.lower()}{i}@{email_domain}".replace(' ', '')
-                phone = self.fake.phone_number()
-                if len(phone) > 20:
-                    phone = '+7' + ''.join(filter(str.isdigit, phone))[-10:]
+        for _ in range(NUM_USERS_CLIENTS):
+            name = self.fake.name()
+            email = self.fake.unique.email()
+            phone = self.fake.phone_number()
+            if len(phone) > 25:
+                phone = phone[:25]
+            users_data.append((name, email, phone, 'Клиент'))
 
-                self.cur.execute("""
-                    INSERT INTO users (name, email, phone, role)
-                    VALUES (%s, %s, %s, %s) RETURNING id
-                """, (name, email, phone, role))
-                user_id = self.cur.fetchone()[0]
-                id_list.append(user_id)
+        for i in range(1, NUM_USERS_SELLERS + 1):
+            name = f"Продавец {i}"
+            email = f"seller{i}@company.com"
+            phone = self.fake.phone_number()
+            if len(phone) > 25:
+                phone = phone[:25]
+            users_data.append((name, email, phone, 'Продавец'))
 
-                if random.random() < 0.7:
-                    self.cur.execute("""
-                        INSERT INTO users_personal_data (user_id, country, city, address, postal_code, birth_date)
-                        VALUES (%s, %s, %s, %s, %s, %s)
-                    """, (
-                        user_id,
-                        self.fake.country(),
-                        self.fake.city(),
-                        self.fake.address(),
-                        self.fake.postcode(),
-                        self.fake.date_of_birth(minimum_age=18, maximum_age=80)
-                    ))
+        for i in range(1, NUM_USERS_ADMINS + 1):
+            name = f"Админ {i}"
+            email = f"admin{i}@company.com"
+            phone = self.fake.phone_number()
+            if len(phone) > 25:
+                phone = phone[:25]
+            users_data.append((name, email, phone, 'Админ'))
 
-            logger.info(f"Добавлено {count} пользователей с ролью '{role}'")
+        self.cur.executemany("""
+            INSERT INTO users (name, email, phone, role)
+            VALUES (%s, %s, %s, %s)
+        """, users_data)
+
+        self.cur.execute("SELECT id, role FROM users ORDER BY id")
+        rows = self.cur.fetchall()
+
+        self.client_ids = [row[0] for row in rows if row[1] == 'Клиент']
+        self.seller_ids = [row[0] for row in rows if row[1] == 'Продавец']
+        self.admin_ids = [row[0] for row in rows if row[1] == 'Админ']
+
+        personal_data = []
+        all_user_ids = [row[0] for row in rows]
+        for user_id in all_user_ids:
+            if random.random() < 0.7:
+                personal_data.append((
+                    user_id,
+                    self.fake.country(),
+                    self.fake.city(),
+                    self.fake.address(),
+                    self.fake.postcode(),
+                    self.fake.date_of_birth(minimum_age=18, maximum_age=80)
+                ))
+
+        if personal_data:
+            self.cur.executemany("""
+                INSERT INTO users_personal_data (user_id, country, city, address, postal_code, birth_date)
+                VALUES (%s, %s, %s, %s, %s, %s)
+            """, personal_data)
 
         self.conn.commit()
+        total_users = NUM_USERS_CLIENTS + NUM_USERS_SELLERS + NUM_USERS_ADMINS
+        logger.info(
+            f"Добавлено пользователей: {total_users} (Клиенты: {NUM_USERS_CLIENTS}, Продавцы: {NUM_USERS_SELLERS}, Админы: {NUM_USERS_ADMINS})")
 
-    def fill_equipment(self, count=1200):
+    def fill_equipment(self):
         statuses = ['Доступно'] * 70 + ['В аренде'] * 15 + \
             ['На обслуживании/В ремонте'] * 10 + ['Списано'] * 5
+        equipment_data = []
 
-        for i in range(1, count + 1):
+        for i in range(1, NUM_EQUIPMENT + 1):
             category_id = random.choice(self.category_ids)
             model_id = random.choice(self.model_ids)
             inventory_number = f"INV-{i:06d}"
             status = random.choice(statuses)
+            equipment_data.append(
+                (category_id, model_id, inventory_number, status))
 
-            self.cur.execute("""
-                INSERT INTO equipment (category_id, model_id, inventory_number, status)
-                VALUES (%s, %s, %s, %s) RETURNING id
-            """, (category_id, model_id, inventory_number, status))
-            eq_id = self.cur.fetchone()[0]
-            self.equipment_ids.append(eq_id)
+        self.cur.executemany("""
+            INSERT INTO equipment (category_id, model_id, inventory_number, status)
+            VALUES (%s, %s, %s, %s)
+        """, equipment_data)
+
+        self.cur.execute("SELECT id FROM equipment ORDER BY id")
+        self.equipment_ids = [row[0] for row in self.cur.fetchall()]
 
         self.conn.commit()
-        logger.info(f"Добавлено {count} единиц оборудования")
+        logger.info(f"Добавлено единиц оборудования: {NUM_EQUIPMENT}")
 
-    def fill_rentals_and_items(self, rental_count=6000):
-        active_statuses = ['Активен', 'Завершён', 'Просрочен срок аренды']
+    def fill_rentals_and_items(self):
         today = date.today()
+        rentals_data = []
 
-        for _ in range(rental_count):
+        for _ in range(NUM_RENTALS):
             client_id = random.choice(self.client_ids)
             employee_id = random.choice(self.seller_ids)
 
@@ -207,11 +241,11 @@ class DatabaseFiller:
             return_date = None
             if random.random() < 0.8:
                 if random.random() < 0.7:
-                    early_days = random.randint(0, 3)
-                    return_date = end_date - timedelta(days=early_days)
+                    return_date = end_date - \
+                        timedelta(days=random.randint(0, 3))
                 else:
-                    late_days = random.randint(1, 15)
-                    return_date = end_date + timedelta(days=late_days)
+                    return_date = end_date + \
+                        timedelta(days=random.randint(1, 15))
 
             status_prob = random.random()
             if status_prob < 0.6:
@@ -223,24 +257,30 @@ class DatabaseFiller:
             else:
                 status = 'Просрочен срок аренды'
 
-            self.cur.execute("""
-                INSERT INTO rentals (user_id, employee_id, start_date, end_date, return_date, status)
-                VALUES (%s, %s, %s, %s, %s, %s) RETURNING id
-            """, (client_id, employee_id, start_date, end_date, return_date, status))
-            rental_id = self.cur.fetchone()[0]
+            rentals_data.append(
+                (client_id, employee_id, start_date, end_date, return_date, status, None))
 
+        self.cur.executemany("""
+            INSERT INTO rentals (user_id, employee_id, start_date, end_date, return_date, status, total_cost)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+        """, rentals_data)
+
+        self.cur.execute(
+            "SELECT id FROM rentals ORDER BY id DESC LIMIT %s", (NUM_RENTALS,))
+
+        rental_ids = [row[0] for row in self.cur.fetchall()][::-1]
+
+        rental_items_data = []
+        for rental_id in rental_ids:
             num_items = random.randint(1, 4)
-            used_equipment = set()
-
-            available_equipment = [
-                eid for eid in self.equipment_ids if eid not in used_equipment]
-
+            used_in_rental = set()
             for _ in range(num_items):
-                if not available_equipment:
+                available = [
+                    eid for eid in self.equipment_ids if eid not in used_in_rental]
+                if not available:
                     break
-                eq_id = random.choice(available_equipment)
-                used_equipment.add(eq_id)
-                available_equipment.remove(eq_id)
+                eq_id = random.choice(available)
+                used_in_rental.add(eq_id)
 
                 self.cur.execute("""
                     SELECT rental_price_per_day FROM equipment_models em
@@ -249,75 +289,83 @@ class DatabaseFiller:
                 """, (eq_id,))
                 price_per_day = self.cur.fetchone()[0]
 
-                damage_fee = float(price_per_day) * \
-                    random.uniform(0, 5) if random.random() < 0.1 else 0.0
+                damage_fee = round(
+                    float(price_per_day) * random.uniform(0, 5), 2) if random.random() < 0.1 else 0.0
+                rental_items_data.append((rental_id, eq_id, damage_fee))
 
-                self.cur.execute("""
-                    INSERT INTO rental_items (rental_id, equipment_id, damage_fee)
-                    VALUES (%s, %s, %s)
-                """, (rental_id, eq_id, round(damage_fee, 2)))
+        if rental_items_data:
+            self.cur.executemany("""
+                INSERT INTO rental_items (rental_id, equipment_id, damage_fee)
+                VALUES (%s, %s, %s)
+            """, rental_items_data)
 
         self.conn.commit()
-        logger.info(f"Добавлено {rental_count} аренд и элементов аренды")
+        logger.info(f"Добавлено аренд: {NUM_RENTALS}")
 
-    def fill_payments(self, count=5000):
-        self.cur.execute("""
-            SELECT r.id FROM rentals r
-            WHERE r.status = 'Завершён'
-              AND EXISTS (SELECT 1 FROM rental_items ri WHERE ri.rental_id = r.id)
-            ORDER BY random()
-            LIMIT %s
-        """, (count,))
+    def fill_payments(self):
+        self.cur.execute(f"""
+            SELECT id FROM rentals
+            WHERE status = 'Завершён'
+            ORDER BY RANDOM()
+            LIMIT {NUM_PAYMENTS}
+        """)
         rental_ids = [row[0] for row in self.cur.fetchall()]
 
         methods = ['Наличные', 'Банковской картой', 'Перевод СБП']
+        payments_data = []
 
         for rental_id in rental_ids:
             self.cur.execute(
                 "SELECT start_date FROM rentals WHERE id = %s", (rental_id,))
             start_date = self.cur.fetchone()[0]
-
             method = random.choice(methods)
             payment_date = start_date + timedelta(days=random.randint(0, 5))
+            payments_data.append((rental_id, method, payment_date))
 
-            self.cur.execute("""
+        if payments_data:
+            self.cur.executemany("""
                 INSERT INTO payments (rental_id, payment_method, payment_date)
-                VALUES (%s,  %s, %s)
-            """, (rental_id, method, payment_date))
+                VALUES (%s, %s, %s)
+            """, payments_data)
 
         self.conn.commit()
-        logger.info(f"Добавлено {len(rental_ids)} платежей")
+        logger.info(
+            f"Добавлено платежей: {len(payments_data)} (планировалось {NUM_PAYMENTS})")
 
     def fill_damages_and_repairs(self):
+
         self.cur.execute("""
-            SELECT ri.equipment_id, ri.rental_id FROM rental_items ri
-            WHERE ri.damage_fee > 0 AND random() < 0.3
-            ORDER BY random() LIMIT 1000
+            SELECT equipment_id, rental_id FROM rental_items
+            WHERE damage_fee > 0
+            ORDER BY RANDOM()
+            LIMIT 1000
         """)
         damage_rows = self.cur.fetchall()
 
-        descriptions = [
-            'Царапины на корпусе', 'Поломка крепления', 'Потертости и сколы',
-            'Незначительные деформации', 'Загрязнение, требующее чистки', 'Мелкие технические неисправности'
-        ]
-
+        damages_data = []
+        descriptions_damage = ['Царапины на корпусе', 'Поломка крепления',
+                               'Потертости и сколы', 'Незначительные деформации', 'Загрязнение']
         for eq_id, rental_id in damage_rows:
-            desc = random.choice(descriptions)
-            self.cur.execute("""
+            desc = random.choice(descriptions_damage)
+            damages_data.append((eq_id, rental_id, desc))
+
+        if damages_data:
+            self.cur.executemany("""
                 INSERT INTO damages (equipment_id, rental_id, description)
                 VALUES (%s, %s, %s)
-            """, (eq_id, rental_id, desc))
+            """, damages_data)
 
         self.cur.execute("""
             SELECT id FROM equipment
-            WHERE status IN ('На обслуживании/В ремонте', 'Списано') OR random() < 0.1
-            ORDER BY random() LIMIT 300
+            ORDER BY RANDOM()
+            LIMIT 300
         """)
         repair_eq_ids = [row[0] for row in self.cur.fetchall()]
 
-        repair_desc = ['Замена подшипников', 'Ремонт электроники',
-                       'Замена щеток', 'Техническое обслуживание', 'Косметический ремонт']
-        statuses = ['Завершён'] * 4 + ['В процессе'] * \
+        repairs_data = []
+        descriptions_repair = ['Замена подшипников', 'Ремонт электроники',
+                               'Замена щеток', 'Техническое обслуживание', 'Косметический ремонт']
+        statuses_repair = ['Завершён'] * 4 + ['В процессе'] * \
             3 + ['Запланирован'] * 2 + ['Отменён'] * 1
 
         for eq_id in repair_eq_ids:
@@ -325,66 +373,60 @@ class DatabaseFiller:
             end_date = start_date + \
                 timedelta(days=random.randint(1, 14)
                           ) if random.random() < 0.7 else None
-            desc = random.choice(repair_desc)
+            desc = random.choice(descriptions_repair)
             cost = round(500 + random.random() * 4500, 2)
-            status = random.choice(statuses)
+            status = random.choice(statuses_repair)
+            repairs_data.append(
+                (eq_id, start_date, end_date, desc, cost, status))
 
-            self.cur.execute("""
+        if repairs_data:
+            self.cur.executemany("""
                 INSERT INTO repairs (equipment_id, start_date, end_date, description, cost, status)
                 VALUES (%s, %s, %s, %s, %s, %s)
-            """, (eq_id, start_date, end_date, desc, cost, status))
+            """, repairs_data)
 
         self.conn.commit()
-        logger.info("Добавлены повреждения и ремонты")
+        logger.info("Добавлена информация о повреждениях и ремонтах")
 
     def update_equipment_status(self):
         self.cur.execute("""
             UPDATE equipment e
             SET status = 'В аренде'
-            WHERE e.id IN (
-                SELECT DISTINCT ri.equipment_id
-                FROM rental_items ri
+            WHERE EXISTS (
+                SELECT 1 FROM rental_items ri
                 JOIN rentals r ON ri.rental_id = r.id
-                WHERE r.status IN ('Активен', 'Просрочен срок аренды')
+                WHERE ri.equipment_id = e.id
+                  AND r.status IN ('Активен', 'Просрочен срок аренды')
             )
         """)
 
         self.cur.execute("""
             UPDATE equipment e
             SET status = 'На обслуживании/В ремонте'
-            WHERE e.id IN (
-                SELECT DISTINCT equipment_id
-                FROM repairs
-                WHERE status IN ('Запланирован', 'В процессе')
+            WHERE EXISTS (
+                SELECT 1 FROM repairs rep
+                WHERE rep.equipment_id = e.id
+                  AND rep.status IN ('Запланирован', 'В процессе')
             )
         """)
 
         self.cur.execute("""
             UPDATE equipment e
             SET status = 'Доступно'
-            WHERE e.status = 'В аренде'
-              AND e.id NOT IN (
-                  SELECT DISTINCT ri.equipment_id
-                  FROM rental_items ri
-                  JOIN rentals r ON ri.rental_id = r.id
-                  WHERE r.status IN ('Активен', 'Просрочен срок аренды')
-              )
-              AND e.id NOT IN (
-                  SELECT DISTINCT equipment_id FROM repairs
-                  WHERE status IN ('Запланирован', 'В процессе')
-              )
+            WHERE e.status NOT IN ('В аренде', 'На обслуживании/В ремонте', 'Списано')
         """)
 
         self.conn.commit()
         logger.info("Статусы оборудования обновлены")
 
     def fill_all(self):
+        logger.info("Начало заполнения базы данных")
         self.fill_equipment_categories()
         self.fill_equipment_models()
         self.fill_users()
-        self.fill_equipment(1200)
-        self.fill_rentals_and_items(6000)
-        self.fill_payments(5000)
+        self.fill_equipment()
+        self.fill_rentals_and_items()
+        self.fill_payments()
         self.fill_damages_and_repairs()
         self.update_equipment_status()
         logger.info("Заполнение базы данных завершено успешно!")
@@ -420,7 +462,7 @@ if __name__ == "__main__":
 
     try:
         filler.fill_all()
-        logger.info("Заполнение базы завершено!")
+        logger.info("Скрипт завершён успешно")
     except Exception as e:
         logger.error(f"Ошибка при заполнении: {e}", exc_info=True)
         if filler.conn:

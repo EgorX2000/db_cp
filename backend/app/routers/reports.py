@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from ..database import get_db
 
-router = APIRouter(prefix="/reports", tags=["Отчёты"])
+router = APIRouter(prefix="/reports", tags=["CRUD SQL"])
 
 
 @router.get("/active")
@@ -34,7 +34,7 @@ def monthly_revenue(db: Session = Depends(get_db)):
     return [dict(row) for row in result]
 
 
-@router.get("/ending-soon")
+@router.get("/ending_soon")
 def ending_soon(days: int = 2, db: Session = Depends(get_db)):
     result = db.execute(
         text("SELECT * FROM get_rentals_ending_soon(:days)").bindparams(days=days)).mappings().fetchall()

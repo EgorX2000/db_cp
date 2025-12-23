@@ -1,11 +1,11 @@
 from fastapi import APIRouter, HTTPException
 import subprocess
 
-router = APIRouter(prefix="/batch", tags=["Массовый импорт"])
+router = APIRouter(prefix="/batch", tags=["batch load"])
 
 
-@router.post("/import")
-def batch_import():
+@router.post("/load_data")
+def batch_load():
     try:
         result = subprocess.run(
             ["python", "scripts/data_load.py"],
