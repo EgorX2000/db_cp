@@ -3,9 +3,26 @@ from faker import Faker
 import random
 from datetime import timedelta, date
 import time
+import logging
 import os
+import sys
 from urllib.parse import urlparse
 from dotenv import load_dotenv
+from pathlib import Path
+
+
+LOG_DIR = Path("./app/logs")
+LOG_DIR.mkdir(exist_ok=True)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[
+        logging.FileHandler(LOG_DIR / "data_load.log", encoding="utf-8"),
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+
+logger = logging.getLogger(__name__)
 
 
 class DatabaseFiller:
@@ -26,9 +43,9 @@ class DatabaseFiller:
             self.conn = psycopg2.connect(**self.db_config)
             self.conn.autocommit = False
             self.cur = self.conn.cursor()
-            print("Успешное подключение к БД")
+            logger.info("Успешное подключение к БД")
         except Exception as e:
-            print(f"Ошибка подключения: {e}")
+            logger.error(f"Ошибка подключения: {e}", exc_info=True)
             raise
 
     def close(self):
@@ -36,7 +53,7 @@ class DatabaseFiller:
             self.cur.close()
         if self.conn:
             self.conn.close()
-        print("Соединение с БД закрыто")
+        logger.info("Соединение с БД закрыто")
 
     def fill_equipment_categories(self):
         categories = [
@@ -67,7 +84,7 @@ class DatabaseFiller:
             self.category_ids.append(cat_id)
 
         self.conn.commit()
-        print(f"Добавлено {len(categories)} категорий оборудования")
+        logger.info(f"Добавлено {len(categories)} категорий оборудования")
 
     def fill_equipment_models(self):
         models = [
@@ -112,7 +129,7 @@ class DatabaseFiller:
             self.model_ids.append(model_id)
 
         self.conn.commit()
-        print(f"Добавлено {len(models)} моделей оборудования")
+        logger.info(f"Добавлено {len(models)} моделей оборудования")
 
     def fill_users(self):
         roles = [
@@ -151,7 +168,7 @@ class DatabaseFiller:
                         self.fake.date_of_birth(minimum_age=18, maximum_age=80)
                     ))
 
-            print(f"Добавлено {count} пользователей с ролью '{role}'")
+            logger.info(f"Добавлено {count} пользователей с ролью '{role}'")
 
         self.conn.commit()
 
@@ -173,7 +190,7 @@ class DatabaseFiller:
             self.equipment_ids.append(eq_id)
 
         self.conn.commit()
-        print(f"Добавлено {count} единиц оборудования")
+        logger.info(f"Добавлено {count} единиц оборудования")
 
     def fill_rentals_and_items(self, rental_count=6000):
         active_statuses = ['Активен', 'Завершён', 'Просрочен срок аренды']
@@ -241,7 +258,7 @@ class DatabaseFiller:
                 """, (rental_id, eq_id, round(damage_fee, 2)))
 
         self.conn.commit()
-        print(f"Добавлено {rental_count} аренд и элементов аренды")
+        logger.info(f"Добавлено {rental_count} аренд и элементов аренды")
 
     def fill_payments(self, count=5000):
         self.cur.execute("""
@@ -269,7 +286,7 @@ class DatabaseFiller:
             """, (rental_id, method, payment_date))
 
         self.conn.commit()
-        print(f"Добавлено {len(rental_ids)} платежей")
+        logger.info(f"Добавлено {len(rental_ids)} платежей")
 
     def fill_damages_and_repairs(self):
         self.cur.execute("""
@@ -318,7 +335,7 @@ class DatabaseFiller:
             """, (eq_id, start_date, end_date, desc, cost, status))
 
         self.conn.commit()
-        print("Добавлены повреждения и ремонты")
+        logger.info("Добавлены повреждения и ремонты")
 
     def update_equipment_status(self):
         self.cur.execute("""
@@ -359,7 +376,7 @@ class DatabaseFiller:
         """)
 
         self.conn.commit()
-        print("Статусы оборудования обновлены")
+        logger.info("Статусы оборудования обновлены")
 
     def fill_all(self):
         self.fill_equipment_categories()
@@ -370,14 +387,13 @@ class DatabaseFiller:
         self.fill_payments(5000)
         self.fill_damages_and_repairs()
         self.update_equipment_status()
-        print("Заполнение базы данных завершено успешно!")
+        logger.info("Заполнение базы данных завершено успешно!")
 
 
 if __name__ == "__main__":
     load_dotenv()
     DATABASE_URL = os.getenv("DATABASE_URL")
 
-    print(DATABASE_URL)
     if not DATABASE_URL:
         raise ValueError("DATABASE_URL не задан!")
 
@@ -394,19 +410,19 @@ if __name__ == "__main__":
     for i in range(20):
         try:
             filler.connect()
-            print("Подключение к БД успешно!")
+            logger.info("Подключение к БД успешно!")
             break
         except Exception as e:
-            print(f"Ждём поднятия БД... ({i+1}/20)")
+            logger.error(f"Ждём поднятия БД... ({i+1}/20)", exc_info=True)
             time.sleep(3)
     else:
         raise Exception("Не удалось подключиться к базе данных")
 
     try:
         filler.fill_all()
-        print("Заполнение базы завершено!")
+        logger.info("Заполнение базы завершено!")
     except Exception as e:
-        print(f"Ошибка при заполнении: {e}")
+        logger.error(f"Ошибка при заполнении: {e}", exc_info=True)
         if filler.conn:
             filler.conn.rollback()
     finally:

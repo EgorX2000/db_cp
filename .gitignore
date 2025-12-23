@@ -1,3 +1,4 @@
 .env
+backend/app/logs/
 backend/app/__pycache__/
 backend/app/routers/__pycache__/

@@ -1,6 +1,5 @@
 from fastapi import APIRouter, HTTPException
 import subprocess
-import os
 
 router = APIRouter(prefix="/batch", tags=["Массовый импорт"])
 
@@ -11,14 +10,13 @@ def batch_import():
         result = subprocess.run(
             ["python", "scripts/data_load.py"],
             cwd=".",
-            capture_output=True,
             text=True,
             timeout=300
         )
         if result.returncode == 0:
-            return {"status": "success", "message": "Данные загружены", "output": result.stdout}
+            return {"status": "success", "message": "Данные загружены"}
         else:
-            return {"status": "error", "error": result.stderr}
+            return {"status": "error", "message": "Ошибка при загрузке"}
     except subprocess.TimeoutExpired:
         raise HTTPException(status_code=504, detail="Таймаут загрузки данных")
     except Exception as e:
