@@ -10,6 +10,6 @@
     - В корневой папке проекта в консоли выполните команду `docker compose up -d --build api`
     - После запуска контейнеров проект будет доступен по адресу `http://localhost:8000/docs`
 5. Для запуска на локальном компьютере:
-    - В корневой папке проекта в консоли выполните команду `docker compose up -d postgres`
+    - В корневой папке проекта в консоли выполните команду `pip install -r ./backend/requirements.txt; docker compose up -d postgres`
     - Переместитесь в папку ./backend и выполните команду  `uvicorn app.main:app --reload --host 0.0.0.0 --port 8000`
     - Проект будет доступен по адресу `http://localhost:8000/docs`

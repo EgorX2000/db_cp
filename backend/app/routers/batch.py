@@ -10,6 +10,7 @@ def batch_load():
         result = subprocess.run(
             ["python", "scripts/data_load.py"],
             cwd=".",
+            capture_output=True,
             text=True,
             timeout=300
         )
