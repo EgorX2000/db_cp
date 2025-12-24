@@ -219,46 +219,6 @@ after insert on rental_items
 for each row execute function update_equipment_status_rental_insert_func();
 
 
-create or replace function update_equipment_status_repair_func()
-returns trigger
-language plpgsql
-as $$
-begin
-    if (tg_op = 'INSERT' and new.status in ('В процессе', 'Запланирован')) then
-        update equipment 
-        set status = 'На обслуживании/В ремонте'
-        where id = new.equipment_id;
-    elsif (tg_op = 'UPDATE' and new.status != old.status) then
-        if (new.status in ('В процессе', 'Запланирован')) then
-            update equipment 
-            set status = 'На обслуживании/В ремонте'
-            where id = new.equipment_id;
-        
-        elsif (new.status in ('Завершён', 'Отменён')) then
-            if not exists (
-                select 1 
-                from rental_items ri
-                join rentals r on ri.rental_id = r.id
-                where ri.equipment_id = new.equipment_id
-                  and r.status = 'Активен'
-            ) then
-                update equipment 
-                set status = 'Доступно'
-                where id = new.equipment_id;
-            end if;
-        end if;
-    end if;
-    
-    return new;
-end;
-$$;
-
-create or replace trigger update_equipment_status_repair_trigger
-after insert or update of status on repairs
-for each row
-execute function update_equipment_status_repair_func();
-
-
 create or replace function update_overdue_rentals_func()
 returns trigger
 language plpgsql
