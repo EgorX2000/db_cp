@@ -13,9 +13,6 @@ class RentalItemResponse(BaseModel):
     equipment_id: int
     damage_fee: float
 
-    class Config:
-        from_attributes = True
-
 
 class RentalCreate(BaseModel):
     user_id: int
@@ -36,6 +33,3 @@ class RentalResponse(BaseModel):
     status: str
     total_cost: Optional[float]
     items: List[RentalItemResponse] = []
-
-    class Config:
-        from_attributes = True
